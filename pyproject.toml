@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ansible-runner-cli"
+version = "1.0.0"
+description = "A cross-platform interactive CLI for running Ansible playbooks and roles safely."
+authors = [
+    { name = "Sanjay Singh", email = "you@example.com" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "gitpython>=3.1.43",
+    "PyYAML>=6.0.2",
+    "InquirerPy>=0.3.4"
+]
+
+[project.scripts]
+ansible-runner = "ansible_runner.main:main_menu"
