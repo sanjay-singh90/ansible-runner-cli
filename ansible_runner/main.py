@@ -10,6 +10,7 @@ REPO_URL = "git@yourgitlab.com:yourgroup/ansible-repo.git"
 LOCAL_REPO_PATH = Path.home() / "ansible-repo"
 ANSIBLE_CFG_PATH = LOCAL_REPO_PATH / "ansible.cfg"
 CUSTOM_COMMANDS_FILE = LOCAL_REPO_PATH / "custom_commands.txt"
+ROLES_DIR = LOCAL_REPO_PATH / "roles"
 # ===========================
 
 def clone_or_update_repo():
@@ -40,6 +41,12 @@ def list_inventories():
         sys.exit(1)
     return [d.name for d in inventories_dir.iterdir() if d.is_dir()]
 
+def list_roles():
+    if not ROLES_DIR.exists():
+        print("[WARNING] No roles directory found.")
+        return []
+    return [d.name for d in ROLES_DIR.iterdir() if d.is_dir()]
+
 def get_hosts_from_inventory(inventory_path):
     hosts = []
     try:
@@ -67,14 +74,13 @@ def check_ssh_connectivity(hosts, ssh_key=None, user=None):
             failed_hosts.append(host)
     return failed_hosts
 
-def run_ansible_playbook(inventory, playbook):
+def run_ansible_playbook(inventory, playbook, dry_run=False):
     inventory_path = LOCAL_REPO_PATH / "inventories" / inventory / "hosts"
     hosts = get_hosts_from_inventory(inventory_path)
-
     user, key = get_ansible_config()
+
     print(f"[INFO] Checking SSH connectivity to {len(hosts)} hosts...")
     failed = check_ssh_connectivity(hosts, ssh_key=key, user=user)
-
     if failed:
         print("\n[WARNING] Could not connect to the following hosts:")
         for h in failed:
@@ -91,16 +97,17 @@ def run_ansible_playbook(inventory, playbook):
             return
 
     cmd = ["ansible-playbook", "-i", str(inventory_path), playbook]
+    if dry_run:
+        cmd.append("--check")
     subprocess.run(cmd)
 
-def run_custom_command(inventory, command):
+def run_custom_command(inventory, command, dry_run=False):
     inventory_path = LOCAL_REPO_PATH / "inventories" / inventory / "hosts"
     hosts = get_hosts_from_inventory(inventory_path)
-
     user, key = get_ansible_config()
+
     print(f"[INFO] Checking SSH connectivity to {len(hosts)} hosts...")
     failed = check_ssh_connectivity(hosts, ssh_key=key, user=user)
-
     if failed:
         print("\n[WARNING] Could not connect to the following hosts:")
         for h in failed:
@@ -117,6 +124,8 @@ def run_custom_command(inventory, command):
             return
 
     cmd = command.split() + ["-i", str(inventory_path)]
+    if dry_run:
+        cmd.append("--check")
     subprocess.run(cmd)
 
 def manage_custom_commands():
@@ -127,8 +136,10 @@ def manage_custom_commands():
         print("1. View saved commands")
         print("2. Add a new command")
         print("3. Back to main menu")
-        choice = input("Select an option: ")
-        if choice == "1":
+        choice = input("Select an option (or type 'exit' to quit): ")
+        if choice.lower() == "exit":
+            sys.exit(0)
+        elif choice == "1":
             with open(CUSTOM_COMMANDS_FILE, "r") as f:
                 cmds = f.readlines()
                 for i, c in enumerate(cmds, 1):
@@ -139,6 +150,8 @@ def manage_custom_commands():
                 f.write(new_cmd + "\n")
         elif choice == "3":
             break
+        else:
+            print("[ERROR] Invalid option.")
 
 def main():
     clone_or_update_repo()
@@ -157,8 +170,17 @@ def main():
                 print(f"{i}. {inv}")
             inv_choice = int(input("Select inventory: "))
             inventory = inventories[inv_choice - 1]
+
+            # List available roles
+            roles = list_roles()
+            if roles:
+                print("\n[INFO] Available roles:")
+                for r in roles:
+                    print(f" - {r}")
+
             playbook = input("Enter playbook file name (relative to repo): ")
-            run_ansible_playbook(inventory, playbook)
+            dry_run = input("Dry run? (y/N): ").strip().lower() == "y"
+            run_ansible_playbook(inventory, playbook, dry_run=dry_run)
 
         elif choice == "2":
             inventories = list_inventories()
@@ -179,7 +201,8 @@ def main():
                 print(f"{i}. {c.strip()}")
             cmd_choice = int(input("Select command: "))
             command = cmds[cmd_choice - 1].strip()
-            run_custom_command(inventory, command)
+            dry_run = input("Dry run? (y/N): ").strip().lower() == "y"
+            run_custom_command(inventory, command, dry_run=dry_run)
 
         elif choice == "3":
             manage_custom_commands()
